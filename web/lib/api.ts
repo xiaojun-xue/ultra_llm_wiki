@@ -51,11 +51,50 @@ export interface SearchResponse {
 }
 
 export interface UploadResponse {
-  document_id: string;
-  title: string;
-  doc_type: string;
-  chunks_count: number;
-  relations_found: number;
+  task_id: string;
+  message: string;
+}
+
+export interface ChunkSummary {
+  index: number;
+  preview: string;
+  tokens: number;
+  type: string;
+}
+
+export interface RelationInfo {
+  target_id: string;
+  target_title: string;
+  target_type: string;
+  relation_type: string;
+  confidence: number;
+  match_reason: string;
+}
+
+export interface TaskStep {
+  name: string;
+  status: "pending" | "done" | "in_progress";
+  progress: number;
+}
+
+export interface TaskStatus {
+  task_id: string;
+  status: "pending" | "parsing" | "embedding" | "discovering" | "done" | "failed";
+  progress: number;
+  steps: TaskStep[];
+  created_at: string;
+  updated_at: string;
+  error: string | null;
+  result: {
+    document_id: string;
+    title: string;
+    doc_type: string;
+    file_size_bytes: number;
+    chunks_count: number;
+    chunk_summary: ChunkSummary[];
+    relations_count: number;
+    relations: RelationInfo[];
+  } | null;
 }
 
 // ── Fetchers ──────────────────────────────────
@@ -122,4 +161,35 @@ export async function uploadFile(
   });
   if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
   return res.json();
+}
+
+export async function getTask(taskId: string): Promise<TaskStatus> {
+  const res = await fetch(`${API_BASE}/tasks/${taskId}`);
+  if (!res.ok) throw new Error(`Task fetch failed: ${res.status}`);
+  return res.json();
+}
+
+export async function pollTask(
+  taskId: string,
+  onProgress?: (task: TaskStatus) => void
+): Promise<TaskStatus> {
+  return new Promise((resolve, reject) => {
+    const interval = setInterval(async () => {
+      try {
+        const task = await getTask(taskId);
+        onProgress?.(task);
+
+        if (task.status === "done") {
+          clearInterval(interval);
+          resolve(task);
+        } else if (task.status === "failed") {
+          clearInterval(interval);
+          reject(new Error(task.error || "Processing failed"));
+        }
+      } catch (err) {
+        clearInterval(interval);
+        reject(err);
+      }
+    }, 1000);
+  });
 }
