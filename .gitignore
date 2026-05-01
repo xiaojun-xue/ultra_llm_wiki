@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+
+# Node
+node_modules/
+.next/
+out/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# Docker volumes
+pgdata/
+minio_data/
+ollama_data/
+redis_data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local knowledge sources
+src_knowledge/

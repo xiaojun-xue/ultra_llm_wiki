@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "llm-wiki": {
+      "type": "sse",
+      "url": "http://your-server-ip:8001/sse",
+      "headers": {
+        "Authorization": "Bearer your-api-key"
+      }
+    }
+  }
+}
