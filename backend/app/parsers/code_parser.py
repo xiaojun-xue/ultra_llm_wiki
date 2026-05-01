@@ -1,8 +1,108 @@
 """Source code parser: extracts functions, classes, includes, and splits by structure."""
 
+import ast
 import re
 
+from app.core.function_analyzer import FunctionAnalyzer
 from app.parsers.base import BaseParser, ParseResult, ParsedChunk
+
+# Shared analyzer instance (lazy, threadsafe)
+_analyzer: FunctionAnalyzer | None = None
+
+
+def _get_analyzer() -> FunctionAnalyzer:
+    global _analyzer
+    if _analyzer is None:
+        _analyzer = FunctionAnalyzer()
+    return _analyzer
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Python-specific AST splitter (class methods handled correctly)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _split_python_ast(text: str, filename: str) -> list[ParsedChunk]:
+    """
+    Split Python source into chunks using ast.parse().
+    Correctly handles: top-level functions, class methods,
+    async functions, and nested lambdas/inner functions (stored as calls).
+    """
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return []
+
+    chunks: list[ParsedChunk] = []
+
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            # Skip lambdas and comprehensions (they don't start at module level)
+            if not isinstance(getattr(node, 'name', None), str):
+                continue
+            func_name = node.name
+            # Get source lines for this function
+            start_line = node.lineno
+            end_line = node.end_lineno or node.lineno
+            func_lines = text.split("\n")[start_line - 1:end_line]
+            func_text = "\n".join(func_lines)
+            chunks.append(ParsedChunk(
+                content=func_text,
+                metadata={
+                    "type": "function",
+                    "language": "python",
+                    "file": filename,
+                    "function": func_name,
+                    "start_line": start_line,
+                    "end_line": end_line,
+                },
+            ))
+
+    return chunks
+
+
+def _split_python_by_regex(text: str, filename: str) -> list[ParsedChunk]:
+    """
+    Fallback: split Python by regex (handles top-level functions only,
+    no class methods). Used when AST parsing fails.
+    """
+    pat = re.compile(r"^(?:async\s+)?def\s+(\w+)\s*\(", re.MULTILINE)
+    lines = text.split("\n")
+    matches = list(pat.finditer(text))
+    if not matches:
+        return []
+
+    chunks: list[ParsedChunk] = []
+    first_func_line = text[:matches[0].start()].count("\n")
+    if first_func_line > 2:
+        header = "\n".join(lines[:first_func_line]).strip()
+        if header:
+            chunks.append(ParsedChunk(
+                content=header,
+                metadata={"type": "header", "language": "python", "file": filename},
+            ))
+
+    include_lines = [l for l in lines[:first_func_line] if re.match(r"^from .+ import|^import ", l)]
+    context_prefix = "\n".join(include_lines[:10])
+
+    for i, match in enumerate(matches):
+        func_name = match.group(1)
+        start_line = text[:match.start()].count("\n")
+        end_line = text[:matches[i + 1].start()].count("\n") if i + 1 < len(matches) else len(lines)
+        func_text = "\n".join(lines[start_line:end_line]).rstrip()
+        chunk_content = f"# File: {filename}\n{context_prefix}\n\n{func_text}" if context_prefix else func_text
+        chunks.append(ParsedChunk(
+            content=chunk_content,
+            metadata={
+                "type": "function",
+                "language": "python",
+                "file": filename,
+                "function": func_name,
+                "start_line": start_line + 1,
+                "end_line": end_line,
+            },
+        ))
+    return chunks
 
 # Language-specific patterns for splitting code into logical chunks
 _PATTERNS = {
@@ -64,6 +164,13 @@ def _extract_references(text: str, lang: str) -> list[str]:
 
 
 def _split_by_functions(text: str, lang: str, filename: str) -> list[ParsedChunk]:
+    # Python uses ast.parse() to correctly handle class methods
+    if lang == "python":
+        chunks = _split_python_ast(text, filename)
+        if chunks:
+            return chunks
+        # Fallback to regex if AST failed
+        return _split_python_by_regex(text, filename)
     """Split source code into chunks by function/class boundaries."""
     patterns = _PATTERNS.get(lang, {})
     func_pat = patterns.get("function")
@@ -164,11 +271,32 @@ class CodeParser(BaseParser):
         refs = _extract_references(text, lang)
         chunks = _split_by_functions(text, lang, filename)
 
+        # ── Enrich chunks with call graph ──────────────────────────────────────
+        analyzer = _get_analyzer()
+        func_calls = analyzer.analyze(text, filename)
+
+        calls_by_func: dict[str, list[str]] = {
+            fc.function_name: fc.calls for fc in func_calls
+        }
+
+        for chunk in chunks:
+            func_name = chunk.metadata.get("function")
+            if func_name and func_name in calls_by_func:
+                chunk.metadata["calls"] = calls_by_func[func_name]
+
+        # Document-level call graph: {function_name: [called_funcs]}
+        call_graph = {fc.function_name: fc.calls for fc in func_calls}
+        # ─────────────────────────────────────────────────────────────────────
+
         return ParseResult(
             title=filename,
             doc_type="source_code",
             content=text,
             chunks=chunks,
-            metadata={"language": lang, "lines": text.count("\n") + 1},
+            metadata={
+                "language": lang,
+                "lines": text.count("\n") + 1,
+                "call_graph": call_graph,
+            },
             references=refs,
         )

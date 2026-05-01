@@ -7,10 +7,12 @@ RUN sed -i 's|deb.debian.org|mirrors.ustc.edu.cn|g' /etc/apt/sources.list.d/debi
     sed -i 's|deb.debian.org|mirrors.ustc.edu.cn|g' /etc/apt/sources.list 2>/dev/null; \
     true
 
-# Install system deps for document parsing
+# Install system deps for document parsing + Clang AST for C/C++ call graph
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
+    libclang-dev \
+    clang \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for fast dependency management

@@ -27,6 +27,8 @@ dependencies = [
     "markdown-it-py>=3.0.0",
     # Embedding (Ollama client)
     "httpx>=0.27.0",
+    # Code analysis (AST-based call graph for C/C++)
+    "clang>=18.0",
     # Utilities
     "pydantic>=2.7.0",
     "pydantic-settings>=2.3.0",

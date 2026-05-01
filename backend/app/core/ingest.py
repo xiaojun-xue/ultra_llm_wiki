@@ -46,11 +46,10 @@ async def ingest_document(
     doc.content_html = result.content_html
     doc.title = result.title or doc.title
     # Merge metadata
-    existing_meta = doc.metadata_ or {}
-    existing_meta.update(result.metadata)
+    merged_meta = {**(doc.metadata_ or {}), **result.metadata}
     if result.references:
-        existing_meta["references"] = result.references
-    doc.metadata_ = existing_meta
+        merged_meta["references"] = result.references
+    doc.metadata_ = merged_meta
 
     if not result.chunks:
         logger.info(f"No chunks generated for {filename}")
