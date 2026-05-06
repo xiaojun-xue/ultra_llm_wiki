@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.embedding import embedding_service
 from app.db.base import get_db
+from app.middleware.auth import AuthenticatedUser
 from app.models.schemas import SearchQuery, SearchResponse, SearchResult
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,11 @@ async def _detect_fts_config(db: AsyncSession) -> str:
 
 
 @router.post("/", response_model=SearchResponse)
-async def search_documents(body: SearchQuery, db: AsyncSession = Depends(get_db)):
+async def search_documents(
+    body: SearchQuery,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedUser = None,
+):
     """
     Hybrid search: vector similarity + full-text keyword search.
     Results are fused using Reciprocal Rank Fusion (RRF).

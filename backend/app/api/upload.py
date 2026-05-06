@@ -1,6 +1,7 @@
 """File upload API — returns task_id immediately, processes in background."""
 
 import logging
+import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, UploadFile, File
@@ -10,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.storage import storage_service
 from app.core.task_manager import task_manager, TaskStatus
 from app.db.base import get_db
+from app.middleware.auth import AuthenticatedUser
 from app.models.document import Document, Tag
 
 logger = logging.getLogger(__name__)
@@ -47,6 +49,8 @@ async def _process_document(
     doc_type: str,
     tag_list: list[str],
     original_size: int,
+    user_id: str | None = None,
+    user_email: str | None = None,
 ) -> None:
     """
     Background pipeline: parse → embed → discover relations.
@@ -67,6 +71,8 @@ async def _process_document(
                 doc_type=doc_type,
                 file_path=None,
                 mime_type=None,
+                owner_id=uuid.UUID(user_id) if user_id else None,
+                created_by=user_email,
                 metadata_={"original_filename": filename, "size_bytes": original_size},
             )
             db.add(doc)
@@ -177,6 +183,7 @@ async def upload_document(
     file: UploadFile = File(...),
     title: str = Form(None),
     tags: str = Form(""),
+    current_user: AuthenticatedUser = None,
 ):
     """
     Upload a file: store to MinIO, then process in background.
@@ -221,6 +228,8 @@ async def upload_document(
         doc_type,
         tag_list,
         len(data),
+        user_id=str(current_user.id) if current_user else None,
+        user_email=current_user.email if current_user else None,
     )
 
     return UploadTaskResponse(

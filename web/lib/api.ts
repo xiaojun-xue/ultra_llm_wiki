@@ -99,12 +99,33 @@ export interface TaskStatus {
 
 // ── Fetchers ──────────────────────────────────
 
+function getToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("llm_wiki_token");
+}
+
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = getToken();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...options?.headers },
+    headers: { ...headers, ...options?.headers },
     ...options,
   });
   if (!res.ok) {
+    // If 401, clear token and redirect to login
+    if (res.status === 401) {
+      localStorage.removeItem("llm_wiki_token");
+      localStorage.removeItem("llm_wiki_user");
+      if (typeof document !== "undefined") {
+        document.cookie = "llm_wiki_token=; path=/; max-age=0";
+      }
+      if (typeof window !== "undefined") {
+        window.location.href = "/login";
+      }
+    }
     const text = await res.text();
     throw new Error(`API error ${res.status}: ${text}`);
   }

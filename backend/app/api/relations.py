@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.base import get_db
+from app.middleware.auth import AuthenticatedUser
 from app.models.document import Document, DocumentRelation
 from app.models.schemas import RelationCreate, RelationOut
 
@@ -17,6 +18,7 @@ async def get_relations(
     doc_id: uuid.UUID,
     relation_type: str | None = None,
     db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedUser = None,
 ):
     """Get all relations for a document (both outgoing and incoming)."""
     # Outgoing
@@ -74,7 +76,11 @@ async def get_relations(
 
 
 @router.post("/", response_model=RelationOut, status_code=201)
-async def create_relation(body: RelationCreate, db: AsyncSession = Depends(get_db)):
+async def create_relation(
+    body: RelationCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedUser = None,
+):
     """Create a new relation between two documents."""
     # Verify both documents exist
     for doc_id in [body.source_id, body.target_id]:
@@ -106,7 +112,11 @@ async def create_relation(body: RelationCreate, db: AsyncSession = Depends(get_d
 
 
 @router.delete("/{relation_id}", status_code=204)
-async def delete_relation(relation_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def delete_relation(
+    relation_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedUser = None,
+):
     """Delete a relation."""
     stmt = select(DocumentRelation).where(DocumentRelation.id == relation_id)
     result = await db.execute(stmt)

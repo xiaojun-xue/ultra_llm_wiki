@@ -9,6 +9,21 @@ CREATE EXTENSION IF NOT EXISTS vector;
 -- CREATE EXTENSION IF NOT EXISTS zhparser;
 -- CREATE TEXT SEARCH CONFIGURATION chinese (PARSER = zhparser);
 
+-- ── Users ─────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    role VARCHAR(20) NOT NULL DEFAULT 'external',
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    last_login_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS ix_users_email ON users(email);
+
 -- ── Documents ─────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS documents (
@@ -20,6 +35,7 @@ CREATE TABLE IF NOT EXISTS documents (
     metadata JSONB DEFAULT '{}',
     file_path VARCHAR(1000),
     mime_type VARCHAR(100),
+    owner_id UUID REFERENCES users(id),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     created_by VARCHAR(100)
@@ -80,3 +96,35 @@ CREATE TABLE IF NOT EXISTS document_tags (
     tag_id INTEGER REFERENCES tags(id) ON DELETE CASCADE,
     PRIMARY KEY (document_id, tag_id)
 );
+
+-- ── Audit Logs ────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id),
+    action VARCHAR(50) NOT NULL,
+    resource_type VARCHAR(50),
+    resource_id UUID,
+    details JSONB,
+    ip_address VARCHAR(45),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_audit_user ON audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS ix_audit_action ON audit_logs(action);
+CREATE INDEX IF NOT EXISTS ix_audit_created ON audit_logs(created_at DESC);
+
+-- ── Document Access Control ────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS document_access (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    document_id UUID REFERENCES documents(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    access_level VARCHAR(20) NOT NULL,
+    granted_by UUID REFERENCES users(id),
+    granted_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(document_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS ix_docaccess_user ON document_access(user_id);
+CREATE INDEX IF NOT EXISTS ix_docaccess_doc ON document_access(document_id);

@@ -9,6 +9,11 @@ class Settings(BaseSettings):
     debug: bool = False
     api_key: str = "changeme"
 
+    # JWT Auth
+    jwt_secret: str = "changeme-in-production-use-256-bit-key"
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 30
+
     # Database
     database_url: str = "postgresql+asyncpg://llm_wiki:llm_wiki@localhost:5432/llm_wiki"
 

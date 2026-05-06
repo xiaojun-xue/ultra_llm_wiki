@@ -25,12 +25,40 @@ def _get_db_session():
     return async_session()
 
 
+def _check_auth(request=None) -> tuple[str | None, str | None]:
+    """
+    Extract and validate JWT from the current request context.
+    Returns (user_id, role) if valid, or (None, None) if invalid/missing.
+
+    Note: MCP SSE transport can pass headers via context. The client should
+    send Authorization: Bearer <token> header when connecting.
+    """
+    if request is None:
+        return None, None
+
+    from fastapi import Header
+    # FastMCP passes request context; try to get Authorization header
+    auth_header = getattr(request, "headers", {}).get("authorization", "")
+
+    if not auth_header:
+        return None, None
+
+    from app.core.auth import decode_token
+    token = auth_header.replace("Bearer ", "")
+    payload = decode_token(token)
+    if not payload:
+        return None, None
+
+    return payload.get("sub"), payload.get("role")
+
+
 @mcp.tool()
 async def search_wiki(
     query: str,
     doc_type: str | None = None,
     tags: list[str] | None = None,
     limit: int = 5,
+    auth_token: str | None = None,
 ) -> str:
     """Search the knowledge base using hybrid search (vector + keyword).
 
@@ -39,6 +67,8 @@ async def search_wiki(
         doc_type: Filter by type: source_code, document, schematic, note
         tags: Filter by tags
         limit: Max results (default 5)
+        auth_token: Optional JWT token for authenticated access.
+                   Clients should pass the Authorization Bearer token here.
 
     Returns:
         Search results with document titles, types, and relevant content snippets.
@@ -71,6 +101,13 @@ async def search_wiki(
     if not rows:
         return f"No results found for: {query}"
 
+    user_info = ""
+    if auth_token:
+        from app.core.auth import decode_token
+        payload = decode_token(auth_token)
+        if payload:
+            user_info = f"[Authenticated as {payload.get('email', 'unknown')}] "
+
     output = []
     for i, row in enumerate(rows, 1):
         output.append(
@@ -83,11 +120,12 @@ async def search_wiki(
 
 
 @mcp.tool()
-async def get_document(doc_id: str) -> str:
+async def get_document(doc_id: str, auth_token: str | None = None) -> str:
     """Get the full content of a document by its ID.
 
     Args:
         doc_id: UUID of the document
+        auth_token: Optional JWT token for authenticated access.
 
     Returns:
         Document title, type, content, and metadata.
@@ -115,12 +153,13 @@ async def get_document(doc_id: str) -> str:
 
 
 @mcp.tool()
-async def get_related(doc_id: str, relation_type: str | None = None) -> str:
+async def get_related(doc_id: str, relation_type: str | None = None, auth_token: str | None = None) -> str:
     """Get all documents related to the given document.
 
     Args:
         doc_id: UUID of the document
         relation_type: Optional filter: references, implements, depends_on, related_to, derived_from
+        auth_token: Optional JWT token for authenticated access.
 
     Returns:
         List of related documents with relation details.
@@ -165,7 +204,7 @@ async def get_related(doc_id: str, relation_type: str | None = None) -> str:
 
 @mcp.tool()
 async def list_documents(
-    doc_type: str | None = None, tag: str | None = None, limit: int = 20
+    doc_type: str | None = None, tag: str | None = None, limit: int = 20, auth_token: str | None = None
 ) -> str:
     """List documents in the knowledge base.
 
@@ -173,6 +212,7 @@ async def list_documents(
         doc_type: Filter by type: source_code, document, schematic, note
         tag: Filter by tag name
         limit: Max results (default 20)
+        auth_token: Optional JWT token for authenticated access.
 
     Returns:
         Document listing with IDs, titles, and types.
@@ -205,12 +245,13 @@ async def list_documents(
 
 
 @mcp.tool()
-async def get_code_context(file_path: str, symbol: str | None = None) -> str:
+async def get_code_context(file_path: str, symbol: str | None = None, auth_token: str | None = None) -> str:
     """Get source code context: the code itself, plus related docs and schematics.
 
     Args:
         file_path: Filename or path of the source code file (e.g., "spi_driver.c")
         symbol: Optional function/class name to focus on
+        auth_token: Optional JWT token for authenticated access.
 
     Returns:
         The code content, related documents, and schematic connections.

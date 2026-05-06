@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.base import get_db
+from app.middleware.auth import AuthenticatedUser
 from app.models.document import Document, DocumentRelation, Tag, DocumentTag
 from app.models.schemas import (
     DocumentCreate,
@@ -25,6 +26,7 @@ async def list_documents(
     skip: int = 0,
     limit: int = 20,
     db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedUser = None,
 ):
     """List documents with optional filtering."""
     stmt = select(Document).options(selectinload(Document.tags))
@@ -53,7 +55,11 @@ async def list_documents(
 
 
 @router.get("/{doc_id}", response_model=DocumentDetail)
-async def get_document(doc_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def get_document(
+    doc_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedUser = None,
+):
     """Get a document by ID with full details and relations."""
     stmt = (
         select(Document)
@@ -117,13 +123,18 @@ async def get_document(doc_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/", response_model=DocumentSummary, status_code=201)
-async def create_document(body: DocumentCreate, db: AsyncSession = Depends(get_db)):
+async def create_document(
+    body: DocumentCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedUser = None,
+):
     """Create a new document (text-based, no file upload)."""
     doc = Document(
         title=body.title,
         doc_type=body.doc_type,
         content=body.content,
         metadata_=body.metadata,
+        created_by=current_user.email if current_user else None,
     )
 
     # Handle tags
@@ -153,7 +164,10 @@ async def create_document(body: DocumentCreate, db: AsyncSession = Depends(get_d
 
 @router.patch("/{doc_id}", response_model=DocumentSummary)
 async def update_document(
-    doc_id: uuid.UUID, body: DocumentUpdate, db: AsyncSession = Depends(get_db)
+    doc_id: uuid.UUID,
+    body: DocumentUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedUser = None,
 ):
     """Update document fields."""
     stmt = select(Document).where(Document.id == doc_id).options(selectinload(Document.tags))
@@ -195,7 +209,11 @@ async def update_document(
 
 
 @router.delete("/{doc_id}", status_code=204)
-async def delete_document(doc_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def delete_document(
+    doc_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthenticatedUser = None,
+):
     """Delete a document and its chunks/relations (cascades)."""
     stmt = select(Document).where(Document.id == doc_id)
     result = await db.execute(stmt)

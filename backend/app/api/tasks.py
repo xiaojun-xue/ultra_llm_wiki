@@ -2,10 +2,11 @@
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.core.task_manager import task_manager
+from app.middleware.auth import AuthenticatedUser
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ class TaskResponse(BaseModel):
 
 
 @router.get("/{task_id}", response_model=TaskResponse)
-async def get_task(task_id: str):
+async def get_task(task_id: str, current_user: AuthenticatedUser = None):
     """Get current status of a task (upload/processing)."""
     task = await task_manager.get_task(task_id)
     if not task:

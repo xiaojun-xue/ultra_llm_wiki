@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJiMDk3ZGRkZS1iYjMzLTRmZWEtYTdmYS1hNzAzZmJmY2E2NGIiLCJyb2xlIjoiZXh0ZXJuYWwiLCJlbWFpbCI6InRlc3RAZXhhbXBsZS5jb20iLCJleHAiOjE3Nzc2ODI2MTksImlhdCI6MTc3NzY4MDgxOX0.OrQhLwLGxpDHk6CMkxFWNieHBvuXyfSYdbx6OkWH-Ns' http://localhost:8000/api/auth/me)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} -> %{redirect_url}\\\\n\" http://localhost/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} -> %{redirect_url}\\\\n\" http://localhost/upload)",
+      "Bash(curl -s -X POST http://localhost/api/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"test@example.com\",\"password\":\"test123\"}')",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "Bash(python3 -c \"import sys,json; docs=json.load\\(sys.stdin\\); pdfs=[d for d in docs if d['mime_type']=='application/pdf']; print\\(f'PDF docs: {len\\(pdfs\\)}'\\); [print\\(f'  - {d[\\\\\"title\\\\\"]} \\({d[\\\\\"id\\\\\"]}\\)'\\) for d in pdfs]\")",
+      "Bash(docker cp:*)"
+    ]
+  }
+}

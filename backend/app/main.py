@@ -54,7 +54,9 @@ from app.api.search import router as search_router
 from app.api.relations import router as relations_router
 from app.api.upload import router as upload_router
 from app.api.tasks import router as tasks_router
+from app.api.auth import router as auth_router
 
+app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(documents_router, prefix="/api/documents", tags=["documents"])
 app.include_router(search_router, prefix="/api/search", tags=["search"])
 app.include_router(relations_router, prefix="/api/relations", tags=["relations"])
